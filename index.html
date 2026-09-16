@@ -708,6 +708,16 @@ function leer(clave){
   });
 }
 
+/* ---------- analytics (umami) ---------- */
+function track(evento, datos){
+  try{
+    if(window.umami && typeof window.umami.track === 'function'){
+      datos ? window.umami.track(evento, datos) : window.umami.track(evento);
+    }
+  }catch(e){}
+}
+var yaTrackeado = {caps:{}, finales:{}, cierre:false};
+
 /* ---------- tema ---------- */
 function ponerTema(t, guardarlo){
   tema = t;
@@ -715,7 +725,11 @@ function ponerTema(t, guardarlo){
   pintarHud();
   if(guardarlo) guardar('lectura:tema', t);
 }
-document.getElementById('btnTema').onclick = function(){ ponerTema(tema === 'claro' ? 'oscuro' : 'claro', true); };
+document.getElementById('btnTema').onclick = function(){
+  var nuevo = tema === 'claro' ? 'oscuro' : 'claro';
+  ponerTema(nuevo, true);
+  track('tema_cambiado', {tema: nuevo});
+};
 
 /* ---------- render ---------- */
 function esc(s){
@@ -903,6 +917,20 @@ function pintarHud(){
 function render(){
   pintar('cur', cap, tj); pintar('prev', cap, tj-1); pintar('next', cap, tj+1);
   pintarHud(); guardar('lectura:avance', {cap:cap, tj:tj});
+  /* --- analytics: eventos de lectura --- */
+  var capActual = CAPS[cap], tarjeta = capActual.tarjetas[tj];
+  var nombre = capActual.persona || ('cap' + cap);
+  if(tarjeta && tarjeta.tipo === 'cierre' && !yaTrackeado.cierre){
+    yaTrackeado.cierre = true;
+    track('cierre_alcanzado');
+  } else if(tj > 0 && !yaTrackeado.caps[cap]){
+    yaTrackeado.caps[cap] = true;
+    track('capitulo_visto', {protagonista: nombre});
+  }
+  if(tj === capActual.tarjetas.length - 1 && tarjeta && tarjeta.tipo !== 'cierre' && !yaTrackeado.finales[cap]){
+    yaTrackeado.finales[cap] = true;
+    track('capitulo_completo', {protagonista: nombre});
+  }
 }
 
 /* ---------- navegación ---------- */
@@ -1065,6 +1093,7 @@ document.getElementById('listaCreditos').innerHTML = htmlCreditos();
 function irACierre(destino){
   var ci = CAPS.length - 1, ti = CAPS[ci].tarjetas.length - 1;
   if(CAPS[ci].tarjetas[ti].tipo !== 'cierre') return abrirCreditos(destino);
+  if(destino) track('nombre_click', {nombre: destino});
   cerrarCapas();
   cap = ci; tj = ti; yaLeyo = true; render();
   requestAnimationFrame(function(){
@@ -1127,10 +1156,11 @@ function abrirIndice(){
   if(yaLeyo) requestAnimationFrame(function(){
     indice.scrollTop = document.getElementById('protas').offsetTop;
   });
+  track('indice_abierto');
 }
-document.getElementById('btnPlay').onclick = function(){ irAPantalla(document.getElementById('pResumen')); };
+document.getElementById('btnPlay').onclick = function(){ track('portada_arranque', {origen: 'play'}); irAPantalla(document.getElementById('pResumen')); };
 document.getElementById('btnSigue').onclick = function(){ irAPantalla(document.getElementById('pIntro')); };
-document.getElementById('btnComenzar').onclick = function(){ irAPantalla(document.getElementById('pDespedida')); };
+document.getElementById('btnComenzar').onclick = function(){ track('portada_arranque', {origen: 'comenzar'}); irAPantalla(document.getElementById('pDespedida')); };
 function aProtas(){ cerrarCrono(); irAPantalla(document.getElementById('protas')); }
 document.getElementById('btnProtas').onclick = aProtas;
 document.getElementById('btnProtas2').onclick = aProtas;
@@ -1138,6 +1168,7 @@ document.getElementById('btnCrono').onclick = function(){
   capaCrono.classList.add('abierta'); capaCrono.setAttribute('aria-hidden','false');
   riel.scrollLeft = 0;
   requestAnimationFrame(function(){ estadoRiel(); marcarActivo(); });
+  track('cronologia_abierta');
 };
 document.getElementById('cerrarCrono').onclick = cerrarCrono;
 
@@ -1280,6 +1311,7 @@ function abrirCorrido(){
   abrirCapa(corrido);
   var aqui = corrido.querySelector('.aqui');
   if(aqui) requestAnimationFrame(function(){ corrido.scrollTop = aqui.offsetTop - 90; });
+  track('corrido_abierto', {protagonista: c.persona});
 }
 document.getElementById('btnCorrido').onclick = abrirCorrido;
 corrido.addEventListener('click', function(e){
